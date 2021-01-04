@@ -4,14 +4,15 @@ import matplotlib.pyplot as plt
 import googletrans
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from matplotlib import cm
 import re
 import os
+from difflib import SequenceMatcher
+from spellchecker import SpellChecker
+
 
 custom_config = r'--oem 3 --psm 11'
 translator = googletrans.Translator()
-img = cv2.imread('training-dataset-images/img_6.png')
-# img = cv2.imread('screenshot.png')
+img = cv2.imread('training-dataset-images/img_245.png')
 
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 ret, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
@@ -28,16 +29,9 @@ for i in range(len(data['level'])):
 
     boxes.append((x, y, w, h))
 
-# for box in boxes:
-#     (x, y, w, h) = box
-#     for box2 in boxes:
-#         (x2, y2, w2, h2) = box2
-#         if x - x2 < w2 and y - y2 < h2 and w < w2 and h < h2:
-#             try:
-#                 boxes.remove(box)
-#             except:
-#                 continue
+spell = SpellChecker()
 
+outputs = []
 translations = []
 valid_boxes = []
 for box in boxes:
@@ -49,15 +43,33 @@ for box in boxes:
     output = pytesseract.image_to_string(cropped, config=custom_config)
     output = re.sub(r'[^\x00-\x7f]', r'', output)
     output = os.linesep.join([s for s in output.splitlines() if s])
+
     print(output)
-    if not output.strip():
+
+    similar_in_outputs = False
+    for out in outputs:
+        if SequenceMatcher(None, output, out).ratio() > 0.2:
+            print("SIMILAR")
+            similar_in_outputs = True
+            break
+
+    if similar_in_outputs:
+        continue
+
+    outputs.append(output)
+
+    for word in output.split():
+        print("CORRECTION " + word + " " + spell.correction(word))
+        output = output.replace(word, spell.correction(word))
+
+    if not output.strip() or len(output.strip()) < 4:
         print("removed")
         continue
+
     translation = translator.translate(output, dest='uk')
     translations.append(translation.text)
     print(translation.text.count("\n"))
     valid_boxes.append(box)
-    # print(translation.text)
 
     cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 255), -1)
 
